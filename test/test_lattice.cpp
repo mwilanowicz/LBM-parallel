@@ -17,7 +17,9 @@ int main() {
     assert(lattice.map_idx(0, 0) == 0); // First element in first row
     assert(lattice.map_idx(1, 0) == 1); // second element in first row
     assert(lattice.map_idx(0, 1) == LBM::Config::width); // Start of the second row (after one full width step)
-    assert(lattice.map_idx(199, 99) == (LBM::Config::width * LBM::Config::height) - 1); // Last element in last row
+    
+    // mappped(last element in x, last element in y) should be equal to last element in last row of mapped/linearized grid
+    assert(lattice.map_idx(LBM::Config::width - 1, LBM::Config::height - 1) == (LBM::Config::width * LBM::Config::height) - 1); // Last element in last row
     std::cout << "Passed!" << std::endl;
 
     // Memory allocation tests

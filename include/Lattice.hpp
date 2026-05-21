@@ -4,6 +4,10 @@
 #include <vector>
 #include <utility>
 
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
+
 /*
 File: Lattice.hpp
 Description: Lattice class definition for Lattice Boltzmann Method simulation.
@@ -11,7 +15,7 @@ It utilizes SoA (Structure of Arrays) layout for distribution functions to optim
 access.
 
 Author: Marcel Wilanowicz
-Date: 2026-04-17
+Date: 2026-05-21
 */
 
 class Lattice {
@@ -20,19 +24,18 @@ private:
     std::array<std::vector<double>, LBM::Q> f_old; // Input Buffer (current state of the lattice)
     std::array<std::vector<double>, LBM::Q> f_new; // Output Buffer (result of computation for the next time step)
 
+    int local_width; // LBM::Config::width
+    int local_height; // Band height + 2 Ghost layers (rows)
+    int y_start;
+    int band_height; // Computational band height (without Ghost layers)
+
 public:
-    // Contructor for allocating 9 + 9 vectors of size (width * height) each (initially zeros)
-    Lattice() {
-        const size_t total_cells = LBM::Config::width * LBM::Config::height; // Total number of cells in the grid
-        for (int i = 0; i < LBM::Q; ++i) {
-            f_old[i].resize(total_cells, 0.0); // Initialize f_old with zeros
-            f_new[i].resize(total_cells, 0.0); // Initialize f_new with zeros
-        }
-    }
+    // Empty constructor: allocation is deferred to initialize()
+    Lattice() : local_width(0), local_height(0), y_start(0), band_height(0) {}
 
     // Map (linearize) the index based on x and y coordinates of the lattice (row-major order) for quick memory access
     inline size_t map_idx(int x, int y) const {
-        return static_cast<size_t>(y) * LBM::Config::width + x; 
+        return static_cast<size_t>(y) * local_width + x; 
     }
 
     // Swap the distribution function arrays for the next iteration
@@ -58,7 +61,7 @@ public:
     }
 
     // Initialization of the grid
-    void initialize();
+    void initialize(int width, int height, int start_y, bool is_parallel);
 
     // Getter for reading summed rho-value of current cell (total mass conservation) 
     // [Chen & Doolen, 1998, Eq. 3].
@@ -100,11 +103,23 @@ public:
         );
     }
 
-    // Performs a single discrete time step (delta t) of the LBM evolution.
+    // Performs a single discrete time step (delta t) of the LBM evolution
+    // (includes local boundaries). 
     void time_step() {
+        int start_y;
+        int end_y;
+
+        if (local_height > band_height) { // Parallel (MPI) mode
+            start_y = 1; // Avoiding lower Ghost layer
+            end_y = local_height - 1; // Avoiding upper Ghost layer (last index)
+        } else { // Sequential mode
+            start_y = 0;
+            end_y = local_height;
+        }
+
         // (x, y): actual position
-        for (int y = 0; y < LBM::Config::height; ++y) {
-            for (int x = 0; x < LBM::Config::width; ++x) {
+        for (int y = start_y; y < end_y; ++y) {
+            for (int x = 0; x < local_width; ++x) {
                 size_t idx = map_idx(x, y); // Map actual position
 
                 double rho = 0.0;
@@ -135,11 +150,14 @@ public:
                     int tx = (x + LBM::ex[q]);
                     int ty = (y + LBM::ey[q]);
 
+                    int global_y = y_start + y - start_y;
+                    int global_ty = global_y + LBM::ey[q];
+
                     // Check for hitting the boundary: Did hit == wall
-                    if (tx < 0 || tx >= LBM::Config::width || ty < 0 || ty >= LBM::Config::height) {
+                    if (tx < 0 || tx >= LBM::Config::width || global_ty < 0 || global_ty >= LBM::Config::height) {
                         
                         // If the wall is the moving lid (top)
-                        if (ty >= LBM::Config::height) {
+                        if (global_ty >= LBM::Config::height) {
                             // Bounce-Back at the boundary [Mohamad, eq. 8.17]:
                             double momentum_correction =  2 * ((rho * LBM::w[q]) / LBM::cs2) * (LBM::Config::u_lid * LBM::ex[q]);
                             f_new[LBM::opposite[q]][idx] = f_coll - momentum_correction;
@@ -149,7 +167,6 @@ public:
                         else {
                             f_new[LBM::opposite[q]][idx] = f_coll;
                         }
-                        
                         
                     }
                     // Didn't hit == fluid
@@ -161,12 +178,12 @@ public:
                 }                
             }
         }
-        swap();
+        swap(); // Swap the distribution function arrays for the next iteration
     }
 
     // Exports full velocity field (point data) for ParaView visualization
     void save_vtk(int step);
 
-    // Exports centerline velocity profiles for Ghia et al. benchmark
+    // Exports velocity field for Ghia et al. benchmark and data analysis
     void save_csv(int step);
 };

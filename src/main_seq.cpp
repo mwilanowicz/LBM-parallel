@@ -5,10 +5,10 @@
 #include <ios>
 
 /*
-File: main.cpp
-Description: Entry point for D2Q9 LBM simulation
+File: main_seq.cpp
+Description: Sequential implementation of the D2Q9 LBM simulation
 Author: Marcel Wilanowicz
-Date: 2026-04-17
+Date: 2026-05-07
 */
 
 int main() {
@@ -17,19 +17,21 @@ int main() {
     std::cout << "Relaxation time (tau): " << LBM::Config::tau << std::endl;
     std::cout << "Lid Velocity: " << LBM::Config::u_lid << std::endl;
     std::cout << "Number of time steps: " << LBM::Config::max_time_steps << std::endl;
+    std::cout << "Reynolds Number: " << (LBM::Config::u_lid * LBM::Config::height) 
+    / ((2 * LBM::Config::tau - 1) / 6)  << std::endl;
 
     Lattice simulation;
 
-    simulation.initialize();
+    simulation.initialize(LBM::Config::width, LBM::Config::height, 0, false);
 
     // Initial mass
     double initial_mass = 0.0; 
     for (int y = 0; y < LBM::Config::height; ++y) {
         for (int x = 0; x < LBM::Config::width; ++x) {
-            initial_mass += simulation.get_rho(x, y);
+            initial_mass += simulation.get_rho(x, y); // 100x100 = 10000
         }
     }
-    std::cout << "\nInitial Mass: " << initial_mass << std::endl;
+    std::cout << "\nInitial Mass: " << std::fixed << std::setprecision(10) << initial_mass << std::endl;
 
     for (int t = 1; t <= LBM::Config::max_time_steps; ++t) {
         simulation.time_step();
@@ -47,7 +49,7 @@ int main() {
             double rel_error = std::abs(current_mass - initial_mass) / initial_mass;
 
             std::cout << "Step: " << std::setw(6) << t 
-            << " | Mass: " << std::fixed << std::setprecision(8) << current_mass 
+            << " | Mass: " << std::fixed << std::setprecision(10) << current_mass 
             << " | Rel. Error: " << std::scientific << std::setprecision(3) << rel_error
             << "\n";
         }
