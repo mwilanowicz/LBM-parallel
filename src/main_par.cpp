@@ -15,7 +15,7 @@ Grid decomposistion examples:
 - mpirun -np 4: 100x100 grid will be divided into 4 bands of 25 rows each.
 - mpirun -np 10: 100x100 grid will be divided into 10 bands of 10 rows each.
 Author: Marcel Wilanowicz
-Date: 2026-05-20
+Date: 2026-05-27
 */
 
 int main(int argc, char** argv) {
@@ -58,7 +58,8 @@ int main(int argc, char** argv) {
     
     Lattice simulation;
 
-    simulation.initialize(LBM::Config::width, rank_ny, rank_ystart, true);
+    // Halo Exchange OFF. Set it TRUE to work
+    simulation.initialize(LBM::Config::width, rank_ny, rank_ystart, true, false); 
 
     // Local Initial mass
     double local_initial_mass = 0.0;

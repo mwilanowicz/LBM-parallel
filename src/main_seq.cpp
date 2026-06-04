@@ -22,7 +22,7 @@ int main() {
 
     Lattice simulation;
 
-    simulation.initialize(LBM::Config::width, LBM::Config::height, 0, false);
+    simulation.initialize(LBM::Config::width, LBM::Config::height, 0, false, false); // No mpi, no halo
 
     // Initial mass
     double initial_mass = 0.0; 

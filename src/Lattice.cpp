@@ -9,13 +9,14 @@
 File: Lattice.cpp
 Description: Implementation of the Lattice class methods for LBM simulation and data export.
 Author: Marcel Wilanowicz
-Date: 2026-05-20
+Date: 2026-05-28
 */
 
-void Lattice::initialize(int width, int height, int start_y, bool is_parallel) {
+void Lattice::initialize(int width, int height, int start_y, bool is_parallel, bool halo_on) {
     local_width = width;
     band_height = height;
     y_start = start_y;
+    use_halo_exchange = halo_on;
 
     if (is_parallel) {
         local_height = height + 2; // Band + 1 Ghost layer on top + 1 Ghost layer at the bottom
@@ -55,6 +56,178 @@ void Lattice::initialize(int width, int height, int start_y, bool is_parallel) {
         }
     }
 }
+
+
+void Lattice::exchange_halo() {
+    #ifdef USE_MPI
+    if (use_halo_exchange == false) {
+        return; 
+    }
+
+    int rank = 0;
+    int nprocs = 1;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+    if (local_height <= band_height) return;
+
+    int bottom_row = 1; 
+    int top_row = local_height - 2; 
+
+    int ghost_bottom = 0; 
+    int ghost_top = local_height - 1; 
+
+    int target_bottom = (rank == 0) ? MPI_PROC_NULL : rank - 1;
+    int target_top = (rank == nprocs - 1) ? MPI_PROC_NULL : rank + 1;
+
+    const int up_dirs[3] = {2, 5, 6};
+    const int down_dirs[3] = {4, 7, 8};
+
+    int up_tag = 1;
+    int down_tag = 2;
+
+    // Temporary buffer to accumulate data (prevents destroying boundary Bounce-Backs)
+    std::vector<double> recv_temp(local_width, 0.0);
+
+    // ---------- UP-Exchange ----------
+    for (int i = 0; i < 3; ++i) {
+        int q = up_dirs[i];
+        double* send_buffer = &f_new[q][map_idx(0, ghost_top)];
+
+        MPI_Sendrecv(
+            send_buffer, local_width, MPI_DOUBLE, target_top, up_tag,
+            recv_temp.data(), local_width, MPI_DOUBLE, target_bottom, up_tag,
+            MPI_COMM_WORLD, MPI_STATUS_IGNORE 
+        );
+
+        if (target_bottom != MPI_PROC_NULL) {
+            for (int x = 0; x < local_width; ++x) {
+                // prevents mass leakage via vertical walls
+                f_new[q][map_idx(x, bottom_row)] += recv_temp[x];
+            }
+        }
+    }
+
+    // ---------- DOWN-Exchange ----------
+    for (int i = 0; i < 3; ++i) {
+        int q = down_dirs[i];
+        double* send_buffer = &f_new[q][map_idx(0, ghost_bottom)];
+
+        MPI_Sendrecv(
+            send_buffer, local_width, MPI_DOUBLE, target_bottom, down_tag,
+            recv_temp.data(), local_width, MPI_DOUBLE, target_top, down_tag,
+            MPI_COMM_WORLD, MPI_STATUS_IGNORE 
+        );
+
+        if (target_top != MPI_PROC_NULL) {
+            for (int x = 0; x < local_width; ++x) {
+                // prevents mass leakage via vertical walls
+                f_new[q][map_idx(x, top_row)] += recv_temp[x]; 
+            }
+        }
+    }
+    #endif
+}
+
+// Performs a single discrete time step (delta t) of the LBM evolution
+// (includes local boundaries). 
+void Lattice::time_step() {
+
+    for (int q = 0; q < LBM::Q; ++q) {
+        std::fill(f_new[q].begin(), f_new[q].end(), 0.0);
+    }
+
+    int start_y;
+    int end_y;
+    int ghost_offset;
+
+    if (local_height > band_height) { // Parallel (MPI) mode
+        start_y = 1; // Avoiding lower Ghost layer (first index)
+        end_y = local_height - 1; // Avoiding upper Ghost layer (last index)
+        ghost_offset = 1;
+        
+    } else { // Sequential mode
+        start_y = 0;
+        end_y = local_height;
+        ghost_offset = 0;
+    }
+
+    // (x, y): actual position
+    for (int y = start_y; y < end_y; ++y) {
+
+        int global_y = y_start + y - ghost_offset;
+
+        if (global_y < 0 || global_y >= LBM::Config::height) {
+            continue; 
+        }
+
+        for (int x = 0; x < local_width; ++x) {
+            size_t idx = map_idx(x, y); 
+
+            double rho = 0.0;
+            double ux = 0.0;
+            double uy = 0.0;
+                        
+            // Macroscopic (summed up) p, u values of the fluid [Chen & Doolen, 1998, Eq. 3].
+            for (int q = 0; q < LBM::Q; ++q) {
+                // Fluid total mass conservation (left equation)
+                rho += f_old[q][idx]; 
+
+                // Fluid total momentum conservation (right equation)
+                ux += f_old[q][idx] * LBM::ex[q];
+                uy += f_old[q][idx] * LBM::ey[q];
+            }
+
+            if (rho <= 0.0) rho = 1.0;
+            std::pair<double, double> u = {ux / rho, uy / rho};
+
+            for (int q = 0; q < LBM::Q; ++q) {
+                double f_eq = get_equilibrium(q, rho, u);
+                double f_coll = f_old[q][idx] - (1.0 / LBM::Config::tau) * (f_old[q][idx] - f_eq);
+                
+                int tx = x + LBM::ex[q];
+                int ty = y + LBM::ey[q];
+                int global_ty = global_y + LBM::ey[q];
+
+                bool hit_wall = (tx < 0 || tx >= LBM::Config::width || global_ty < 0 || global_ty >= LBM::Config::height);
+
+                // If HALO is disabled, we treat artificial MPI boundaries as physical walls (Bounce-Back)
+                if (use_halo_exchange == false && local_height > band_height) {
+                    if (ty < ghost_offset || ty >= local_height - ghost_offset) {
+                        hit_wall = true;
+                    }
+                }
+
+                // Check for hitting the boundary: Did hit == wall
+                if (hit_wall) {
+                    // If the wall is the moving lid (top)
+                    if (global_ty >= LBM::Config::height) {
+                        double momentum_correction = 2 * ((rho * LBM::w[q]) / LBM::cs2) * (LBM::Config::u_lid * LBM::ex[q]);
+                        f_new[LBM::opposite[q]][idx] = f_coll - momentum_correction;
+                    } 
+                    
+                    // Stationary walls (bottom, left, right)
+                    else {
+                        f_new[LBM::opposite[q]][idx] = f_coll;
+                    }  
+                }
+                // Didn't hit == fluid
+                else {
+                    if (ty >= 0 && ty < local_height) {
+                        f_new[q][map_idx(tx, ty)] = f_coll;
+                    }
+                }
+            }                
+        }
+    }
+
+    if (local_height > band_height && use_halo_exchange) {
+        exchange_halo();
+    }
+
+    swap(); 
+}
+
 
 void Lattice::save_vtk(int step) {
     int rank = 0;
@@ -114,10 +287,12 @@ void Lattice::save_vtk(int step) {
     if (rank == 0) {
         std::filesystem::create_directory("outputs");
         std::string mpi_suffix = "";
+        std::string halo_suffix = "";
         #ifdef USE_MPI
-        mpi_suffix = "_mpi_" + std::to_string(nprocs);        
+        mpi_suffix = "_mpi_" + std::to_string(nprocs);  
+        halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";      
         #endif
-        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + ".vtk";
+        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + halo_suffix + ".vtk";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
@@ -202,10 +377,12 @@ void Lattice::save_csv(int step) {
     if (rank == 0) {
         std::filesystem::create_directory("outputs");
         std::string mpi_suffix = "";
+        std::string halo_suffix = "";
         #ifdef USE_MPI
         mpi_suffix = "_mpi_" + std::to_string(nprocs);
+        halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";
         #endif
-        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + ".csv";
+        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + halo_suffix + ".csv";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
