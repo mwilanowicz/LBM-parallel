@@ -15,7 +15,7 @@ It utilizes SoA (Structure of Arrays) layout for distribution functions to optim
 access.
 
 Author: Marcel Wilanowicz
-Date: 2026-05-27
+Date: 2026-06-10
 */
 
 class Lattice {
@@ -104,14 +104,18 @@ public:
         );
     }
 
+    // Boundary data synchronization between parallel subdomains
     void exchange_halo();
     
-    // Performs a single discrete time step (delta t) of the LBM evolution
+    // Performs a single discrete time step of the LBM evolution loop
     void time_step();
 
-    // Exports full velocity field (point data) for ParaView visualization
-    void save_vtk(int step);
+    // Exports full velocity field for ParaView visualization
+    void save_vtk();
 
     // Exports velocity field for Ghia et al. benchmark and data analysis
-    void save_csv(int step);
+    void save_csv();
+
+    // Exports time execution and grid configuration metric of the simulation
+    void save_benchmark(int width, int height, int nprocs, double elapsed_time);
 };

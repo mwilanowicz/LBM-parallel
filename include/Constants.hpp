@@ -5,7 +5,7 @@
 File: Constants.hpp
 Description: D2Q9 model constants and simulation parameters for Lattice Boltzmann Method.
 Author: Marcel Wilanowicz
-Date: 2026-04-15
+Date: 2026-06-10
 */
 
 namespace LBM {
@@ -74,6 +74,7 @@ namespace LBM {
         // Lid velocity: we use 0.1 for low mach number
         static constexpr double u_lid = 0.1;
 
+        // Tested grid sizes: 100x100, 256x256, 512x512
         static constexpr int width = 100; // Width of the simulation grid
         static constexpr int height = 100; // Height of the simulation grid
         static constexpr int max_time_steps = 10000; // Number of simulation time steps

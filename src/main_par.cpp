@@ -15,7 +15,7 @@ Grid decomposistion examples:
 - mpirun -np 4: 100x100 grid will be divided into 4 bands of 25 rows each.
 - mpirun -np 10: 100x100 grid will be divided into 10 bands of 10 rows each.
 Author: Marcel Wilanowicz
-Date: 2026-05-27
+Date: 2026-06-10
 */
 
 int main(int argc, char** argv) {
@@ -78,6 +78,9 @@ int main(int argc, char** argv) {
         std::cout << "\nInitial Mass: " << std::fixed << std::setprecision(10) << global_initial_mass << std::endl;
     }
 
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronization between MPI processes in a group (start)
+    double start_time = MPI_Wtime(); // Simulation time measurement (start)
+
     for (int t = 1; t <= LBM::Config::max_time_steps; ++t) {
         simulation.time_step();
 
@@ -109,9 +112,22 @@ int main(int argc, char** argv) {
         }
     }
 
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronization between MPI processes in a group (end)
+    double end_time = MPI_Wtime(); // Simulation time measurement (end)
+
+    double elapsed_time = end_time - start_time;
+
+    if (rank == 0) {
+        std::cout << "\nSimulation finished in: " << std::fixed << std::setprecision(4) 
+        << elapsed_time << " seconds.\n";
+    }
+
     // Export simulation data (methods use MPI_Gather internally)
-    simulation.save_vtk(LBM::Config::max_time_steps);
-    simulation.save_csv(LBM::Config::max_time_steps);
+    simulation.save_vtk();
+    simulation.save_csv();
+
+    // Export simulation benchmarks
+    simulation.save_benchmark(LBM::Config::width, LBM::Config::height, nprocs, elapsed_time);
 
     MPI_Finalize(); // End all processes safely and release resources
 

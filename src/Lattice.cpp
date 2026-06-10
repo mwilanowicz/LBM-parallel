@@ -9,7 +9,7 @@
 File: Lattice.cpp
 Description: Implementation of the Lattice class methods for LBM simulation and data export.
 Author: Marcel Wilanowicz
-Date: 2026-05-28
+Date: 2026-06-10
 */
 
 void Lattice::initialize(int width, int height, int start_y, bool is_parallel, bool halo_on) {
@@ -56,7 +56,6 @@ void Lattice::initialize(int width, int height, int start_y, bool is_parallel, b
         }
     }
 }
-
 
 void Lattice::exchange_halo() {
     #ifdef USE_MPI
@@ -228,8 +227,7 @@ void Lattice::time_step() {
     swap(); 
 }
 
-
-void Lattice::save_vtk(int step) {
+void Lattice::save_vtk() {
     int rank = 0;
     
     #ifdef USE_MPI
@@ -285,14 +283,18 @@ void Lattice::save_vtk(int step) {
 
     // File export executed exclusively by rank 0
     if (rank == 0) {
-        std::filesystem::create_directory("outputs");
+        std::string grid = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
+        std::string subdir = "outputs/" + grid;
+        std::filesystem::create_directories(subdir);
+
         std::string mpi_suffix = "";
         std::string halo_suffix = "";
         #ifdef USE_MPI
         mpi_suffix = "_mpi_" + std::to_string(nprocs);  
         halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";      
         #endif
-        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + halo_suffix + ".vtk";
+
+        std::string filename = subdir + "/output_" + grid + mpi_suffix + halo_suffix + ".vtk";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
@@ -327,7 +329,7 @@ void Lattice::save_vtk(int step) {
     }
 }
 
-void Lattice::save_csv(int step) {
+void Lattice::save_csv() {
     int rank = 0;
     #ifdef USE_MPI
     int nprocs = 1;
@@ -335,6 +337,8 @@ void Lattice::save_csv(int step) {
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     #endif
 
+    // If ghost/halo layers are present (parallel mode), start reading from row 1 to skip 
+    // the bottom ghost/halo layer
     int start_y = (local_height > band_height) ? 1 : 0;
 
     // Every process prepares its local data (without Ghosts)
@@ -375,14 +379,18 @@ void Lattice::save_csv(int step) {
 
     // Saving to a file only by process 0
     if (rank == 0) {
-        std::filesystem::create_directory("outputs");
+        std::string grid = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
+        std::string subdir = "outputs/" + grid;
+        std::filesystem::create_directories(subdir);
+
         std::string mpi_suffix = "";
         std::string halo_suffix = "";
         #ifdef USE_MPI
         mpi_suffix = "_mpi_" + std::to_string(nprocs);
         halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";
         #endif
-        std::string filename = "outputs/output_" + std::to_string(step) + mpi_suffix + halo_suffix + ".csv";
+
+        std::string filename = subdir + "/output_" + grid + mpi_suffix + halo_suffix + ".csv";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
@@ -399,6 +407,46 @@ void Lattice::save_csv(int step) {
                 file << x << "," << y << "," << global_ux[idx] << "," << global_uy[idx] << "\n";
             }
         }
+        file.close();
+    }
+}
+
+void Lattice::save_benchmark(int width, int height, int nprocs, double elapsed_time) {
+    int rank = 0;
+    #ifdef USE_MPI
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    #endif
+
+    if (rank == 0) {
+        std::string grid = std::to_string(width) + "x" + std::to_string(height);
+        std::string subdir = "outputs/" + grid;
+        std::filesystem::create_directories(subdir);
+
+        std::string filename = subdir + "/benchmark_" + grid + ".csv";
+
+        bool file_exists = std::filesystem::exists(filename);
+
+        // Open file in append mode for multiple MPI runs
+        std::ofstream file(filename, std::ios_base::app); 
+
+        if (!file.is_open()) {
+            std::cerr << "Unable to open a file!" << std::endl;
+            return;
+        }
+
+        if (!file_exists) {
+            file << "width,height,nprocs,halo_mode,elapsed_time\n";
+        }
+
+        std::string halo_mode = "";
+        #ifdef USE_MPI
+        halo_mode = use_halo_exchange ? "on" : "off";
+        #endif
+
+        // Append execution metrics
+        file << width << "," << height << "," << nprocs << "," << halo_mode << "," << std::fixed 
+        << std::setprecision(6) << elapsed_time << "\n";
+
         file.close();
     }
 }
