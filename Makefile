@@ -1,4 +1,4 @@
-.PHONY: main par test clean
+.PHONY: main_seq main_par test clean
 FLAGS = -std=c++20 -pthread -Wall -Iinclude
 CC = g++
 MPICC = mpic++
