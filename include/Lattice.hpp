@@ -117,5 +117,5 @@ public:
     void save_csv();
 
     // Exports time execution and grid configuration metric of the simulation
-    void save_benchmark(int width, int height, int nprocs, double elapsed_time);
+    void save_metadata(int width, int height, int nprocs, double elapsed_time);
 };

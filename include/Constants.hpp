@@ -56,28 +56,46 @@ namespace LBM {
     // ---------------  Simulation parameters (Compile-time) ---------------
     struct Config {
         /*
-        Reynolds number: Re = (u * L)/nu [White, p.27 Eq. 1.24],
+        Reynolds number: Re = (u * L) / nu [White, p.27 Eq. 1.24],
         
         where:
         - u is the flow velocity (in our case u_lid)
-        - L is characterstic length (in our case height)
-        - nu is kinematic viscosity
+        - L is characteristic length (in our case height H)
+        - nu is kinematic viscosity: nu = (2 * tau - 1) / 6 
         
-        To get target Re = 100:
-        nu = (2 * tau − 1)/6 = (2 * 0.8 - 1)/6 = 0.1
-        u_lid = (Re * nu) / H = (100 * 0.1) / 100 = 0.1
+        To maintain a constant target Re = 100 with fixed tau = 0.8 (nu = 0.1):
+        Formula: u_lid = (Re * nu) / H = 10.0 / H
+
+        Calculations for tested grid sizes:
+        1) 64 x 64:
+            H = 64
+            u_lid = (100 * 0.1) / 64 = 0.15625
+            Re = (0.15625 * 64) / 0.1 = 100
+
+        2) 100 x 100:
+            H = 100
+            u_lid = (100 * 0.1) / 100 = 0.1
+            Re = (0.1 * 100) / 0.1 = 100
+
+        3) 128 x 128:
+            H = 128
+            u_lid = (100 * 0.1) / 128 = 0.078125
+            Re = (0.078125 * 128) / 0.1 = 100
         */
 
         // Kinematic viscosity: nu = (2*tau − 1)/6, therefore tau must be > 0.5 for stability [Chen & Doolen, 1998, p.335].
         static constexpr double tau = 0.8; 
 
-        // Lid velocity: we use 0.1 for low mach number
-        static constexpr double u_lid = 0.1;
+        // Tested grid sizes
+        static constexpr int width = 128; // Width of the simulation grid
+        static constexpr int height = 128; // Height of the simulation grid
 
-        // Tested grid sizes: 100x100, 256x256, 512x512
-        static constexpr int width = 100; // Width of the simulation grid
-        static constexpr int height = 100; // Height of the simulation grid
-        static constexpr int max_time_steps = 10000; // Number of simulation time steps
+        // Lid velocity adjusted to maintain Re = 100: u_lid = (Re * nu) / height
+        static constexpr double u_lid = 10.0 / height;
+
+        static constexpr int max_time_steps = 20000; // Number of simulation time steps
+
+        static constexpr bool is_halo = true; // For using halo exchange
     };
 
 }

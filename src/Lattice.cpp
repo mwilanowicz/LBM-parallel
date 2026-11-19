@@ -9,7 +9,7 @@
 File: Lattice.cpp
 Description: Implementation of the Lattice class methods for LBM simulation and data export.
 Author: Marcel Wilanowicz
-Date: 2026-06-10
+Date: 2026-11-19
 */
 
 void Lattice::initialize(int width, int height, int start_y, bool is_parallel, bool halo_on) {
@@ -229,9 +229,9 @@ void Lattice::time_step() {
 
 void Lattice::save_vtk() {
     int rank = 0;
-    
-    #ifdef USE_MPI
     int nprocs = 1;
+
+    #ifdef USE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     #endif
@@ -283,18 +283,19 @@ void Lattice::save_vtk() {
 
     // File export executed exclusively by rank 0
     if (rank == 0) {
-        std::string grid = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
-        std::string subdir = "outputs/" + grid;
-        std::filesystem::create_directories(subdir);
-
-        std::string mpi_suffix = "";
-        std::string halo_suffix = "";
+        std::string halo_dir = "halo_off";
         #ifdef USE_MPI
-        mpi_suffix = "_mpi_" + std::to_string(nprocs);  
-        halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";      
+        halo_dir = use_halo_exchange ? "halo_on" : "halo_off";
         #endif
 
-        std::string filename = subdir + "/output_" + grid + mpi_suffix + halo_suffix + ".vtk";
+        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        std::string grid_dir = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
+
+        // outputs/<halo>/<mpi>/<grid>/
+        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
+        std::filesystem::create_directories(subdir);
+
+        std::string filename = subdir + "/output.vtk";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
@@ -331,8 +332,8 @@ void Lattice::save_vtk() {
 
 void Lattice::save_csv() {
     int rank = 0;
-    #ifdef USE_MPI
     int nprocs = 1;
+    #ifdef USE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     #endif
@@ -377,24 +378,25 @@ void Lattice::save_csv() {
     global_uy = local_uy;
     #endif
 
-    // Saving to a file only by process 0
+    // File export executed exclusively by rank 0
     if (rank == 0) {
-        std::string grid = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
-        std::string subdir = "outputs/" + grid;
-        std::filesystem::create_directories(subdir);
-
-        std::string mpi_suffix = "";
-        std::string halo_suffix = "";
+        std::string halo_dir = "halo_off";
         #ifdef USE_MPI
-        mpi_suffix = "_mpi_" + std::to_string(nprocs);
-        halo_suffix = use_halo_exchange ? "_halo_on" : "_halo_off";
+        halo_dir = use_halo_exchange ? "halo_on" : "halo_off";
         #endif
 
-        std::string filename = subdir + "/output_" + grid + mpi_suffix + halo_suffix + ".csv";
+        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        std::string grid_dir = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
+
+        // outputs/<halo>/<mpi>/<grid>/
+        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
+        std::filesystem::create_directories(subdir);
+
+        std::string filename = subdir + "/output.csv";
         std::ofstream file(filename);
 
         if (!file.is_open()) {
-            std::cerr << "Unable to open a file!" << std::endl;
+            std::cerr << "Unable to open a file: " << filename << std::endl;
             return;
         }
 
@@ -411,41 +413,41 @@ void Lattice::save_csv() {
     }
 }
 
-void Lattice::save_benchmark(int width, int height, int nprocs, double elapsed_time) {
+void Lattice::save_metadata(int width, int height, int nprocs, double elapsed_time) {
     int rank = 0;
     #ifdef USE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     #endif
 
+    // File export executed exclusively by rank 0
     if (rank == 0) {
-        std::string grid = std::to_string(width) + "x" + std::to_string(height);
-        std::string subdir = "outputs/" + grid;
+        std::string halo_dir = "halo_off";
+        std::string halo_mode = "off";
+        #ifdef USE_MPI
+        halo_dir = use_halo_exchange ? "halo_on" : "halo_off";
+        halo_mode = use_halo_exchange ? "on" : "off";
+        #endif
+
+        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        std::string grid_dir = std::to_string(width) + "x" + std::to_string(height);
+
+        // outputs/<halo>/<mpi>/<grid>/
+        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
         std::filesystem::create_directories(subdir);
 
-        std::string filename = subdir + "/benchmark_" + grid + ".csv";
+        std::string filename = subdir + "/metadata.csv";
 
-        bool file_exists = std::filesystem::exists(filename);
-
-        // Open file in append mode for multiple MPI runs
-        std::ofstream file(filename, std::ios_base::app); 
+        // Open file in overwrite (truncate) mode
+        std::ofstream file(filename); 
 
         if (!file.is_open()) {
             std::cerr << "Unable to open a file!" << std::endl;
             return;
         }
 
-        if (!file_exists) {
-            file << "width,height,nprocs,halo_mode,elapsed_time\n";
-        }
-
-        std::string halo_mode = "";
-        #ifdef USE_MPI
-        halo_mode = use_halo_exchange ? "on" : "off";
-        #endif
-
-        // Append execution metrics
+        file << "width,height,nprocs,halo_mode,elapsed_time\n";
         file << width << "," << height << "," << nprocs << "," << halo_mode << "," << std::fixed 
-        << std::setprecision(6) << elapsed_time << "\n";
+             << std::setprecision(6) << elapsed_time << "\n";
 
         file.close();
     }

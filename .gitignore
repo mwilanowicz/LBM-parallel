@@ -4,6 +4,7 @@ test_bin
 *.obj
 *.exe
 *.out
+.vscode/
 
 build/
 bin/
@@ -13,4 +14,7 @@ bin/
 
 papers/
 outputs/
+test/
+cavity_par
 
+__pycache__/

@@ -4,37 +4,35 @@
 
 This project features a custom-built, computational engine in C++ utilizing the Lattice Boltzmann Method (LBM) in D2Q9 model. The solver simulates 2D fluid dynamics, specifically the classic Lid-Driven Cavity problem. 
 
-The implementation has been scaled from a sequential baseline to a memory-distributed parallel architecture using **MPI (Message Passing Interface)**.
+The implementation has been scaled from a sequential to a memory-distributed parallel architecture using MPI.
 
 ## Project Structure
 
 ```text
 .
+├── Makefile
+├── README.md
 ├── include
 │   ├── Constants.hpp
 │   └── Lattice.hpp
-├── Makefile
-├── README.md
 ├── src
 │   ├── Lattice.cpp
-│   ├── main_par.cpp
-│   └── main_seq.cpp
+│   └── cavity
+│       ├── main_par.cpp
+│       └── main_seq.cpp
 └── test
-    ├── assessment_100x100.ipynb
-    ├── assessment_256x256.ipynb
-    ├── assessment_512x512.ipynb
     └── test_lattice.cpp
 ```
 
 ## Features & Project Scope
 
-* **Distributed Domain Decomposition:** 1D spatial partitioning into horizontal bands with halo exchange (`MPI_Sendrecv` / `MPI_Barrier` coordination).
+* **Domain Decomposition:** 1D spatial partitioning into horizontal bands with halo exchange (`MPI_Sendrecv`, `MPI_Barrier`).
 
 * **Physical Validation:** Verified fluid dynamics against the established data (Ghia et al.) using centerline velocity profiles ($u_x, u_y$).
 
-* **Parallel Bitwise Verification:** Spatial node-by-node identity ensuring bitwise reproducibility between sequential and parallel executions.
+* **Bitwise Verification:** Spatial node-by-node identity ensuring bitwise reproducibility between sequential and parallel executions.
 
-* **Scalability Benchmarking:** Performance tracking across various grid sizes ($100\times100$, $256\times256$, $512\times512$) for speedup, efficiency and overhead analysis.
+* **Scalability:** Performance tracking across various grid sizes ($64\times64$, $128\times128$, $256\times256$) for speedup, efficiency and overhead analysis.
 
 ## Quick Start
 
@@ -52,14 +50,13 @@ To compile and run the simulation, run:
 
 ```bash
 # Compile the parallel solver
-make main_par
+make cavity_par
 
 # Run simulation using e.g 4 MPI processes
-mpirun -np 4 ./main_par
+mpirun -np 4 ./cavity_par
 
-# (Optionally) compile and run pure sequential version
-make main_seq
-
+# (Optionally) compile and run sequential version
+make cavity_seq
 ```
 
 ---
