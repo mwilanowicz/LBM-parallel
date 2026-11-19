@@ -1,5 +1,3 @@
-main*
-test_bin
 *.o
 *.obj
 *.exe
