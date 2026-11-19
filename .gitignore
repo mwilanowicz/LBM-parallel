@@ -18,3 +18,4 @@ test/
 cavity_par
 
 __pycache__/
+*.ipynb
