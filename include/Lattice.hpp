@@ -24,7 +24,7 @@ private:
     std::array<std::vector<double>, LBM::Q> f_old; // Input Buffer (current state of the lattice)
     std::array<std::vector<double>, LBM::Q> f_new; // Output Buffer (result of computation for the next time step)
 
-    int local_width; // LBM::Config::width
+    int local_width; // LBM config width
     int local_height; // Band height + 2 Ghost layers (rows)
     int y_start;
     int band_height; // Computational band height (without Ghost layers)

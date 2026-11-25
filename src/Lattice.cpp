@@ -12,6 +12,8 @@ Author: Marcel Wilanowicz
 Date: 2026-11-19
 */
 
+using LBM::cfg;
+
 void Lattice::initialize(int width, int height, int start_y, bool is_parallel, bool halo_on) {
     local_width = width;
     band_height = height;
@@ -156,7 +158,7 @@ void Lattice::time_step() {
 
         int global_y = y_start + y - ghost_offset;
 
-        if (global_y < 0 || global_y >= LBM::Config::height) {
+        if (global_y < 0 || global_y >= cfg.height) {
             continue; 
         }
 
@@ -182,13 +184,13 @@ void Lattice::time_step() {
 
             for (int q = 0; q < LBM::Q; ++q) {
                 double f_eq = get_equilibrium(q, rho, u);
-                double f_coll = f_old[q][idx] - (1.0 / LBM::Config::tau) * (f_old[q][idx] - f_eq);
+                double f_coll = f_old[q][idx] - (1.0 / cfg.tau) * (f_old[q][idx] - f_eq);
                 
                 int tx = x + LBM::ex[q];
                 int ty = y + LBM::ey[q];
                 int global_ty = global_y + LBM::ey[q];
 
-                bool hit_wall = (tx < 0 || tx >= LBM::Config::width || global_ty < 0 || global_ty >= LBM::Config::height);
+                bool hit_wall = (tx < 0 || tx >= cfg.width || global_ty < 0 || global_ty >= cfg.height);
 
                 // If HALO is disabled, we treat artificial MPI boundaries as physical walls (Bounce-Back)
                 if (use_halo_exchange == false && local_height > band_height) {
@@ -200,8 +202,8 @@ void Lattice::time_step() {
                 // Check for hitting the boundary: Did hit == wall
                 if (hit_wall) {
                     // If the wall is the moving lid (top)
-                    if (global_ty >= LBM::Config::height) {
-                        double momentum_correction = 2 * ((rho * LBM::w[q]) / LBM::cs2) * (LBM::Config::u_lid * LBM::ex[q]);
+                    if (global_ty >= cfg.height) {
+                        double momentum_correction = 2 * ((rho * LBM::w[q]) / LBM::cs2) * (cfg.u_lid * LBM::ex[q]);
                         f_new[LBM::opposite[q]][idx] = f_coll - momentum_correction;
                     } 
                     
@@ -259,7 +261,7 @@ void Lattice::save_vtk() {
     }
 
     // Prepare global buffers on rank 0
-    size_t global_points = static_cast<size_t>(LBM::Config::width) * LBM::Config::height;
+    size_t global_points = static_cast<size_t>(cfg.width) * cfg.height;
     std::vector<double> global_ux;
     std::vector<double> global_uy;
     std::vector<double> global_rho;
@@ -288,12 +290,14 @@ void Lattice::save_vtk() {
         halo_dir = use_halo_exchange ? "halo_on" : "halo_off";
         #endif
 
-        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
-        std::string grid_dir = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
+        // std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        // std::string grid_dir = std::to_string(cfg.width) + "x" + std::to_string(cfg.height);
 
         // outputs/<halo>/<mpi>/<grid>/
-        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
-        std::filesystem::create_directories(subdir);
+        // std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
+        
+        std::string subdir = "."; // Current working directory (same as run.sh)
+        // std::filesystem::create_directories(subdir);
 
         std::string filename = subdir + "/output.vtk";
         std::ofstream file(filename);
@@ -308,7 +312,7 @@ void Lattice::save_vtk() {
         file << "LBM_LidDrivenCavity_Output\n";
         file << "ASCII\n";
         file << "DATASET STRUCTURED_POINTS\n";
-        file << "DIMENSIONS " << LBM::Config::width << " " << LBM::Config::height << " 1\n";
+        file << "DIMENSIONS " << cfg.width << " " << cfg.height << " 1\n";
         file << "ORIGIN 0 0 0\n";
         file << "SPACING 1 1 1\n\n";
 
@@ -361,8 +365,8 @@ void Lattice::save_csv() {
     std::vector<double> global_uy;
 
     if (rank == 0) {
-        global_ux.resize(LBM::Config::width * LBM::Config::height);
-        global_uy.resize(LBM::Config::width * LBM::Config::height);
+        global_ux.resize(cfg.width * cfg.height);
+        global_uy.resize(cfg.width * cfg.height);
     }
 
     #ifdef USE_MPI
@@ -385,12 +389,13 @@ void Lattice::save_csv() {
         halo_dir = use_halo_exchange ? "halo_on" : "halo_off";
         #endif
 
-        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
-        std::string grid_dir = std::to_string(LBM::Config::width) + "x" + std::to_string(LBM::Config::height);
-
+        // std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        // std::string grid_dir = std::to_string(cfg.width) + "x" + std::to_string(cfg.height);
+    
         // outputs/<halo>/<mpi>/<grid>/
-        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
-        std::filesystem::create_directories(subdir);
+        // std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
+        std::string subdir = "."; // Current working directory (same as run.sh)
+        // std::filesystem::create_directories(subdir);
 
         std::string filename = subdir + "/output.csv";
         std::ofstream file(filename);
@@ -403,9 +408,9 @@ void Lattice::save_csv() {
         file << "x,y,ux,uy\n";
 
         // Saving in Row-Major
-        for (int y = 0; y < LBM::Config::height; ++y) {
-            for (int x = 0; x < LBM::Config::width; ++x) {
-                size_t idx = static_cast<size_t>(y) * LBM::Config::width + x;
+        for (int y = 0; y < cfg.height; ++y) {
+            for (int x = 0; x < cfg.width; ++x) {
+                size_t idx = static_cast<size_t>(y) * cfg.width + x;
                 file << x << "," << y << "," << global_ux[idx] << "," << global_uy[idx] << "\n";
             }
         }
@@ -428,12 +433,13 @@ void Lattice::save_metadata(int width, int height, int nprocs, double elapsed_ti
         halo_mode = use_halo_exchange ? "on" : "off";
         #endif
 
-        std::string mpi_dir = "mpi_" + std::to_string(nprocs);
-        std::string grid_dir = std::to_string(width) + "x" + std::to_string(height);
+        // std::string mpi_dir = "mpi_" + std::to_string(nprocs);
+        // std::string grid_dir = std::to_string(width) + "x" + std::to_string(height);
 
         // outputs/<halo>/<mpi>/<grid>/
-        std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
-        std::filesystem::create_directories(subdir);
+        // std::string subdir = "outputs/" + halo_dir + "/" + mpi_dir + "/" + grid_dir;
+        std::string subdir = "."; // Current working directory (same as run.sh)
+        // std::filesystem::create_directories(subdir);
 
         std::string filename = subdir + "/metadata.csv";
 

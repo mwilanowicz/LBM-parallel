@@ -33,6 +33,8 @@ Date: 2026-11-11
 */
 
 int main(int argc, char** argv) {
+    LBM::cfg = LBM::loadConfig("."); // Load config.csv parameters
+
     int rank, nprocs;
     // initialise MPI
     MPI_Init(&argc,&argv);
@@ -42,11 +44,11 @@ int main(int argc, char** argv) {
 
     // save number of processes
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
-
+    
     // --- Domain Decomposition ---
     int rank_ny; // Local band height
     int rank_ystart; // Global offset
-    int NY = LBM::Config::height; // Global height
+    int NY = LBM::cfg.height; // Global height
 
     // if ranks are less than remainder (non-ideal grid division)
     if(rank < NY % nprocs) { 
@@ -61,25 +63,25 @@ int main(int argc, char** argv) {
 
     if (rank == 0) {
         std::cout << "Processes: " << nprocs << std::endl;
-        std::cout << "HALO exchange: " << (LBM::Config::is_halo ? "ON" : "OFF") << std::endl; 
-        std::cout << "Simulation width: " << LBM::Config::width << std::endl;
-        std::cout << "Simulation height: " << LBM::Config::height << std::endl;
-        std::cout << "Relaxation time (tau): " << LBM::Config::tau << std::endl;
-        std::cout << "Lid Velocity: " << LBM::Config::u_lid << std::endl;
-        std::cout << "Number of time steps: " << LBM::Config::max_time_steps << std::endl;
-        std::cout << "Reynolds Number: " << (LBM::Config::u_lid * LBM::Config::height) 
-        / ((2 * LBM::Config::tau - 1) / 6)  << std::endl;
+        std::cout << "HALO exchange: " << (LBM::cfg.is_halo ? "ON" : "OFF") << std::endl; 
+        std::cout << "Simulation width: " << LBM::cfg.width << std::endl;
+        std::cout << "Simulation height: " << LBM::cfg.height << std::endl;
+        std::cout << "Relaxation time (tau): " << LBM::cfg.tau << std::endl;
+        std::cout << "Lid Velocity: " << LBM::cfg.u_lid << std::endl;
+        std::cout << "Number of time steps: " << LBM::cfg.max_time_steps << std::endl;
+        std::cout << "Reynolds Number: " << (LBM::cfg.u_lid * LBM::cfg.height) 
+        / ((2 * LBM::cfg.tau - 1) / 6)  << std::endl;
     }
     
     Lattice simulation;
 
     // Initialization
-    simulation.initialize(LBM::Config::width, rank_ny, rank_ystart, true, LBM::Config::is_halo); 
+    simulation.initialize(LBM::cfg.width, rank_ny, rank_ystart, true, LBM::cfg.is_halo); 
 
     // Local Initial mass
     double local_initial_mass = 0.0;
     for (int y = 1; y <= rank_ny; ++y) { // Avoids Ghost layer (y = 0)
-        for (int x = 0; x < LBM::Config::width; ++x) {
+        for (int x = 0; x < LBM::cfg.width; ++x) {
             local_initial_mass += simulation.get_rho(x, y);
         }
     }
@@ -96,7 +98,7 @@ int main(int argc, char** argv) {
     MPI_Barrier(MPI_COMM_WORLD); // Synchronization between MPI processes in a group (start)
     double start_time = MPI_Wtime(); // Simulation time measurement (start)
 
-    for (int t = 1; t <= LBM::Config::max_time_steps; ++t) {
+    for (int t = 1; t <= LBM::cfg.max_time_steps; ++t) {
         simulation.time_step();
 
         // Mass monitoring (after 1000 steps each)
@@ -104,7 +106,7 @@ int main(int argc, char** argv) {
             double local_current_mass = 0.0;
             // Iterate ONLY over the rows of this concrete process
             for (int y = 1; y <= rank_ny; ++y) { // Avoids Ghost layer (y = 0)
-                for (int x = 0; x < LBM::Config::width; ++x) {
+                for (int x = 0; x < LBM::cfg.width; ++x) {
                     local_current_mass += simulation.get_rho(x, y);
                 }
             }
@@ -142,7 +144,7 @@ int main(int argc, char** argv) {
     simulation.save_csv();
 
     // Export simulation metadata
-    simulation.save_metadata(LBM::Config::width, LBM::Config::height, nprocs, elapsed_time);
+    simulation.save_metadata(LBM::cfg.width, LBM::cfg.height, nprocs, elapsed_time);
 
     MPI_Finalize(); // End all processes safely and release resources
 

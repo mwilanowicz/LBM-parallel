@@ -1,5 +1,7 @@
 #pragma once
 #include <array>
+#include <fstream>
+#include <string>
 
 /*
 File: Constants.hpp
@@ -83,19 +85,39 @@ namespace LBM {
             Re = (0.078125 * 128) / 0.1 = 100
         */
 
+        // -------- Changeable Parameters (Default) ------------
+        int width = 64; // Width of the simulation grid
+        int height = 64; // Height of the simulation grid
+        bool is_halo = true; // For using halo exchange
+        
+        // Lid velocity (scales with Re = 100)
+        double u_lid = 10.0 / height; // u_lid = (Re * nu) / height
+        // -----------------------------------------------------
+
         // Kinematic viscosity: nu = (2*tau − 1)/6, therefore tau must be > 0.5 for stability [Chen & Doolen, 1998, p.335].
-        static constexpr double tau = 0.8; 
-
-        // Tested grid sizes
-        static constexpr int width = 128; // Width of the simulation grid
-        static constexpr int height = 128; // Height of the simulation grid
-
-        // Lid velocity adjusted to maintain Re = 100: u_lid = (Re * nu) / height
-        static constexpr double u_lid = 10.0 / height;
-
+        static constexpr double tau = 0.8;  
         static constexpr int max_time_steps = 20000; // Number of simulation time steps
-
-        static constexpr bool is_halo = true; // For using halo exchange
     };
 
+    inline Config loadConfig(const std::string& subdir) {
+        Config cfg;
+        std::ifstream file(subdir + "/config.csv");
+        std::string line, halo_str;
+        char comma;
+        std::getline(file, line); // Skip header row
+        if (file >> cfg.width >> comma >> cfg.height >> comma >> halo_str) {
+            if (!halo_str.empty() && halo_str.back() == '\r') { // Make sure the string isn't empty before checking its last character
+                halo_str.pop_back();
+            }
+            if (halo_str == "on") {
+                cfg.is_halo = true;
+            } else {
+                cfg.is_halo = false;
+            }
+            cfg.u_lid = 10.0 / cfg.height; // Recalculate using the loaded height
+        }
+        return cfg;
+    }
+
+    inline Config cfg; // Global variable
 }
