@@ -2,7 +2,7 @@
 File: benchmark4.py
 Description: Weak Scaling Benchmark
 Author: Marcel Wilanowicz
-Date: 25.11.26
+Date: 26.11.26
 """
 
 import matplotlib
@@ -13,16 +13,16 @@ import pandas as pd
 import glob
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-DATA_DIR = PROJECT_ROOT / "data" / "rosi"
+DATA_DIR = PROJECT_ROOT / "data" / "rosi_v2"
 
 
 def load_benchmark(GRID):
     """
     Finds and merges all metadata.csv files across halo modes and MPI process counts for a given grid.
     """
-    pattern = str(DATA_DIR / "halo_on" / "mpi_*" / GRID / "metadata.csv")
+    pattern = str(DATA_DIR / "halo_*" / "mpi_*" / GRID / "metadata.csv")
     files = glob.glob(pattern)
 
     if not files:
@@ -101,6 +101,7 @@ def plot_benchmark(df_avg):
     ax1.set_title("Elapsed time")
     ax1.set_xlabel("Grid resolution")
     ax1.set_ylabel("Time [s]")
+    ax1.set_ylim(0, 2 * data["elapsed_time"].max())
     ax1.grid(True, linestyle="--", alpha=0.5)
     ax1.legend()
 

@@ -10,7 +10,7 @@ import pandas as pd
 import glob
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def load_benchmark(GRID):
